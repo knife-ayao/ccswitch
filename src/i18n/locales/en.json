@@ -2699,5 +2699,33 @@
     "expiredHint": "Run the {{tool}} command to refresh your login",
     "queryFailed": "Query failed",
     "refresh": "Refresh"
+  },
+  "tools": {
+    "title": "Environment Tools",
+    "description": "Install and manage runtime environments for development",
+    "nodejs": {
+      "title": "Node.js",
+      "description": "JavaScript runtime environment, required by Claude Code, Codex, and other tools",
+      "installed": "Installed {{version}}",
+      "notInstalled": "Not installed",
+      "tooOld": "Version too old: {{version}} (requires >= {{minVersion}})",
+      "latest": "Latest version: {{version}}",
+      "checking": "Checking...",
+      "installing": "Installing...",
+      "updating": "Updating...",
+      "reinstalling": "Reinstalling...",
+      "install": "Install",
+      "updateNow": "Update to {{version}} now",
+      "updateTo": "Update to {{version}}",
+      "reinstall": "Reinstall",
+      "refresh": "Refresh",
+      "latestLts": "Latest LTS: {{version}}",
+      "requiresUpdate": "Update required",
+      "tooOldWarning": "Current version cannot run Claude Code. Please update immediately!",
+      "installSuccess": "Node.js installed successfully!",
+      "installFailed": "Installation failed: {{error}}",
+      "updateSuccess": "Node.js updated successfully!",
+      "updateFailed": "Update failed: {{error}}"
+    }
   }
 }

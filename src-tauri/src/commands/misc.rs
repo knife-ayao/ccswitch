@@ -3271,6 +3271,194 @@ pub async fn set_window_theme(window: tauri::Window, theme: String) -> Result<()
     window.set_theme(tauri_theme).map_err(|e| e.to_string())
 }
 
+/// Node.js 版本信息
+#[derive(Debug, serde::Serialize)]
+pub struct NodeVersion {
+    /// 版本号（如 "v20.11.0"）
+    version: Option<String>,
+    /// 是否已安装
+    installed: bool,
+    /// 错误信息
+    error: Option<String>,
+}
+
+/// Node.js 最新版本信息
+#[derive(Debug, serde::Serialize)]
+pub struct NodeLatestVersion {
+    /// 最新 LTS 版本
+    lts: String,
+    /// 最新当前版本
+    current: String,
+}
+
+/// 检查 Node.js 版本
+#[tauri::command]
+pub async fn get_node_version() -> Result<NodeVersion, String> {
+    use std::process::Command;
+
+    let output = if cfg!(target_os = "windows") {
+        Command::new("cmd")
+            .args(["/C", "node", "--version"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+    } else {
+        Command::new("node")
+            .arg("--version")
+            .output()
+    };
+
+    match output {
+        Ok(out) => {
+            if out.status.success() {
+                let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                Ok(NodeVersion {
+                    version: Some(stdout),
+                    installed: true,
+                    error: None,
+                })
+            } else {
+                let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+                Ok(NodeVersion {
+                    version: None,
+                    installed: false,
+                    error: Some(stderr),
+                })
+            }
+        }
+        Err(e) => Ok(NodeVersion {
+            version: None,
+            installed: false,
+            error: Some(format!("Failed to execute node: {}", e)),
+        }),
+    }
+}
+
+/// 获取 Node.js 最新版本
+#[tauri::command]
+pub async fn get_node_latest_version() -> Result<NodeLatestVersion, String> {
+    // 使用全局 HTTP 客户端（已包含代理配置）
+    let client = crate::proxy::http_client::get();
+
+    let response = client
+        .get("https://nodejs.org/dist/index.json")
+        .send()
+        .await
+        .map_err(|e| format!("Failed to fetch Node.js versions: {}", e))?;
+
+    let versions: Vec<serde_json::Value> = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse Node.js versions: {}", e))?;
+
+    // 找到最新的 LTS 版本
+    let lts_version = versions
+        .iter()
+        .filter(|v| v.get("lts").and_then(|l| l.as_str()).is_some())
+        .max_by(|a, b| {
+            let a_ver = a.get("version").and_then(|v| v.as_str()).unwrap_or("");
+            let b_ver = b.get("version").and_then(|v| v.as_str()).unwrap_or("");
+            compare_node_versions(a_ver, b_ver)
+        })
+        .and_then(|v| v.get("version").and_then(|v| v.as_str()))
+        .ok_or("Failed to find LTS version")?
+        .to_string();
+
+    // 找到最新的当前版本
+    let current_version = versions
+        .iter()
+        .max_by(|a, b| {
+            let a_ver = a.get("version").and_then(|v| v.as_str()).unwrap_or("");
+            let b_ver = b.get("version").and_then(|v| v.as_str()).unwrap_or("");
+            compare_node_versions(a_ver, b_ver)
+        })
+        .and_then(|v| v.get("version").and_then(|v| v.as_str()))
+        .ok_or("Failed to find current version")?
+        .to_string();
+
+    Ok(NodeLatestVersion {
+        lts: lts_version,
+        current: current_version,
+    })
+}
+
+/// 比较 Node.js 版本号
+fn compare_node_versions(a: &str, b: &str) -> std::cmp::Ordering {
+    let parse = |v: &str| -> (u32, u32, u32) {
+        let v = v.trim_start_matches('v');
+        let parts: Vec<&str> = v.split('.').collect();
+        (
+            parts.first().and_then(|p| p.parse().ok()).unwrap_or(0),
+            parts.get(1).and_then(|p| p.parse().ok()).unwrap_or(0),
+            parts.get(2).and_then(|p| p.parse().ok()).unwrap_or(0),
+        )
+    };
+
+    let (a1, a2, a3) = parse(a);
+    let (b1, b2, b3) = parse(b);
+
+    a1.cmp(&b1).then(a2.cmp(&b2)).then(a3.cmp(&b3))
+}
+
+/// 安装 Node.js
+#[tauri::command]
+pub async fn install_nodejs() -> Result<String, String> {
+    use std::process::Command;
+
+    let (cmd, args) = if cfg!(target_os = "windows") {
+        // Windows: 使用 winget
+        ("cmd", vec!["/C", "winget", "install", "OpenJS.NodeJS.LTS", "--silent"])
+    } else if cfg!(target_os = "macos") {
+        // macOS: 使用 Homebrew
+        ("brew", vec!["install", "node@20"])
+    } else {
+        // Linux: 使用 nvm
+        ("bash", vec!["-c", "curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash && source ~/.nvm/nvm.sh && nvm install --lts"])
+    };
+
+    let output = Command::new(cmd)
+        .args(&args)
+        .output()
+        .map_err(|e| format!("Failed to start installation: {}", e))?;
+
+    if output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        Ok(format!("Node.js 安装成功！{}", stdout))
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        Err(format!("安装失败: {}", stderr))
+    }
+}
+
+/// 更新 Node.js
+#[tauri::command]
+pub async fn update_nodejs() -> Result<String, String> {
+    use std::process::Command;
+
+    let (cmd, args) = if cfg!(target_os = "windows") {
+        // Windows: 使用 winget
+        ("cmd", vec!["/C", "winget", "upgrade", "OpenJS.NodeJS.LTS", "--silent"])
+    } else if cfg!(target_os = "macos") {
+        // macOS: 使用 Homebrew
+        ("brew", vec!["upgrade", "node@20"])
+    } else {
+        // Linux: 使用 nvm
+        ("bash", vec!["-c", "source ~/.nvm/nvm.sh && nvm install --lts && nvm use --lts"])
+    };
+
+    let output = Command::new(cmd)
+        .args(&args)
+        .output()
+        .map_err(|e| format!("Failed to start update: {}", e))?;
+
+    if output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        Ok(format!("Node.js 更新成功！{}", stdout))
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        Err(format!("更新失败: {}", stderr))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

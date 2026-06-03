@@ -1354,6 +1354,11 @@ pub fn run() {
             commands::scan_local_proxies,
             // Window theme control
             commands::set_window_theme,
+            // Node.js management
+            commands::get_node_version,
+            commands::get_node_latest_version,
+            commands::install_nodejs,
+            commands::update_nodejs,
             // Generic managed auth commands
             commands::auth_start_login,
             commands::auth_poll_for_account,
