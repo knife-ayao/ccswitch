@@ -1,6 +1,7 @@
 mod app_config;
 mod app_store;
 mod auto_launch;
+pub mod browser;
 mod claude_desktop_config;
 mod claude_mcp;
 mod claude_plugin;
@@ -1359,6 +1360,17 @@ pub fn run() {
             commands::get_node_latest_version,
             commands::install_nodejs,
             commands::update_nodejs,
+            // Python management
+            commands::check_python_environment,
+            commands::get_python_latest_version,
+            commands::install_python,
+            commands::reinstall_python,
+            // Git management
+            commands::get_git_version,
+            commands::install_git,
+            // VS Code management
+            commands::check_vscode,
+            commands::install_vscode,
             // Generic managed auth commands
             commands::auth_start_login,
             commands::auth_poll_for_account,
@@ -1404,6 +1416,13 @@ pub fn run() {
             commands::enter_lightweight_mode,
             commands::exit_lightweight_mode,
             commands::is_lightweight_mode,
+            // Browser management
+            commands::check_browser,
+            commands::download_browser,
+            commands::install_browser,
+            commands::get_browser_path,
+            commands::download_and_install_browser,
+            commands::cleanup_browser_installer,
         ]);
 
     let app = builder

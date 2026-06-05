@@ -2703,6 +2703,9 @@
   "tools": {
     "title": "环境工具",
     "description": "安装和管理开发所需的运行时环境",
+    "runtime": "运行环境",
+    "packages": "工具安装",
+    "comingSoon": "更多工具即将推出...",
     "nodejs": {
       "title": "Node.js",
       "description": "JavaScript 运行时环境，Claude Code、Codex 等工具的前置依赖",
@@ -2726,6 +2729,69 @@
       "installFailed": "安装失败: {{error}}",
       "updateSuccess": "Node.js 更新成功！",
       "updateFailed": "更新失败: {{error}}"
+    },
+    "python": {
+      "title": "Python",
+      "description": "Python 运行时环境，Claude Code 调用 Python 库的前置依赖",
+      "healthy": "环境正常",
+      "notFound": "未找到 Python",
+      "isLatest": "已是最新版本: {{version}}",
+      "outdated": "版本过低: {{version}}",
+      "pipMissing": "pip 不可用",
+      "libsMissing": "缺失库: {{libs}}",
+      "needsReinstall": "环境异常，需要重新安装",
+      "checking": "检查中...",
+      "installing": "安装中...",
+      "updating": "更新中...",
+      "reinstalling": "重新安装中...",
+      "install": "安装 Python",
+      "updateTo": "更新到 {{version}}",
+      "reinstall": "重新安装 Python",
+      "refresh": "刷新检查",
+      "latestVersion": "最新版本: {{version}}",
+      "requiresReinstall": "需要重新安装",
+      "installSuccess": "Python 安装成功！",
+      "installFailed": "安装失败: {{error}}",
+      "updateSuccess": "Python 更新成功！",
+      "updateFailed": "更新失败: {{error}}",
+      "reinstallSuccess": "Python 重新安装成功！",
+      "reinstallFailed": "重新安装失败: {{error}}"
+    },
+    "claudeCode": {
+      "description": "Anthropic 官方 CLI 工具",
+      "installed": "已安装 {{version}}",
+      "notInstalled": "未安装",
+      "checking": "检查中...",
+      "installing": "安装中...",
+      "install": "安装",
+      "refresh": "刷新",
+      "latestVersion": "最新版本: {{version}}",
+      "installSuccess": "Claude Code 安装成功！",
+      "installFailed": "安装失败: {{error}}"
+    },
+    "codex": {
+      "description": "OpenAI 官方 CLI 工具",
+      "installed": "已安装 {{version}}",
+      "notInstalled": "未安装",
+      "checking": "检查中...",
+      "installing": "安装中...",
+      "install": "安装",
+      "refresh": "刷新",
+      "latestVersion": "最新版本: {{version}}",
+      "installSuccess": "Codex 安装成功！",
+      "installFailed": "安装失败: {{error}}"
+    },
+    "vscode": {
+      "description": "微软代码编辑器",
+      "installed": "已安装 {{version}}",
+      "notInstalled": "未安装",
+      "checking": "检查中...",
+      "installing": "安装中...",
+      "install": "安装",
+      "refresh": "刷新",
+      "latestVersion": "最新版本: {{version}}",
+      "installSuccess": "VS Code 安装成功！",
+      "installFailed": "安装失败: {{error}}"
     }
   }
 }

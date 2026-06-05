@@ -3459,6 +3459,577 @@ pub async fn update_nodejs() -> Result<String, String> {
     }
 }
 
+/// Python 环境检查结果
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PythonStatus {
+    /// Python 是否存在
+    found: bool,
+    /// Python 版本号
+    version: Option<String>,
+    /// 版本是否是最新版本
+    is_latest: bool,
+    /// 错误/提示信息
+    message: String,
+}
+
+/// Python 最新版本信息
+#[derive(Debug, serde::Serialize)]
+pub struct PythonLatestVersion {
+    /// 最新稳定版本
+    stable: String,
+}
+
+/// 尝试执行 Python 命令获取版本
+/// 返回 (命令名, 版本号) 或 None
+fn try_python_command(command: &str) -> Option<String> {
+    use std::process::Command;
+
+    // 尝试直接执行命令（不通过 cmd）
+    let direct_output = if cfg!(target_os = "windows") {
+        Command::new(command)
+            .arg("--version")
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+    } else {
+        Command::new(command)
+            .arg("--version")
+            .output()
+    };
+
+    // 如果直接执行失败，尝试通过 cmd 执行
+    let output = match direct_output {
+        Ok(out) if out.status.success() => Ok(out),
+        _ => {
+            if cfg!(target_os = "windows") {
+                Command::new("cmd")
+                    .args(["/C", command, "--version"])
+                    .creation_flags(CREATE_NO_WINDOW)
+                    .output()
+            } else {
+                Command::new(command)
+                    .arg("--version")
+                    .output()
+            }
+        }
+    };
+
+    match output {
+        Ok(out) => {
+            // Python --version 输出可能在 stdout 或 stderr
+            let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+
+            let raw = if stdout.starts_with("Python ") {
+                stdout
+            } else if stderr.starts_with("Python ") {
+                stderr
+            } else if out.status.success() && !stdout.is_empty() {
+                stdout
+            } else {
+                return None;
+            };
+
+            let ver = raw
+                .strip_prefix("Python ")
+                .unwrap_or(&raw)
+                .to_string();
+            Some(ver)
+        }
+        Err(_) => None,
+    }
+}
+
+/// 检测 Python 版本，尝试多个命令
+/// 返回 (使用的命令, 版本号)
+fn detect_python() -> (Option<String>, Option<String>) {
+    // Windows 上尝试: python, py, python3
+    // macOS/Linux 上尝试: python3, python
+    let commands = if cfg!(target_os = "windows") {
+        vec!["python", "py", "python3"]
+    } else {
+        vec!["python3", "python"]
+    };
+
+    for cmd in commands {
+        if let Some(version) = try_python_command(cmd) {
+            return (Some(cmd.to_string()), Some(version));
+        }
+    }
+
+    (None, None)
+}
+
+/// 检查 Python 环境（仅检测版本）
+#[tauri::command]
+pub async fn check_python_environment() -> Result<PythonStatus, String> {
+    // 检测 Python 是否存在
+    let (python_cmd, version) = detect_python();
+    let found = python_cmd.is_some();
+
+    if !found {
+        return Ok(PythonStatus {
+            found: false,
+            version: None,
+            is_latest: false,
+            message: "Python 未安装".to_string(),
+        });
+    }
+
+    // 获取最新版本判断是否需要更新
+    let latest = get_python_latest_version().await.ok();
+    let is_latest = match (&version, &latest) {
+        (Some(current), Some(latest)) => {
+            let current_ver = current.trim();
+            let latest_ver = latest.stable.trim();
+            compare_python_versions(current_ver, latest_ver) != std::cmp::Ordering::Less
+        }
+        _ => false,
+    };
+
+    let message = if !found {
+        "Python 未安装".to_string()
+    } else if !is_latest {
+        format!("版本 {} 不是最新，建议更新", version.as_deref().unwrap_or("未知"))
+    } else {
+        "环境正常".to_string()
+    };
+
+    Ok(PythonStatus {
+        found,
+        version,
+        is_latest,
+        message,
+    })
+}
+
+/// 获取 Python 最新版本
+#[tauri::command]
+pub async fn get_python_latest_version() -> Result<PythonLatestVersion, String> {
+    // 使用全局 HTTP 客户端（已包含代理配置）
+    let client = crate::proxy::http_client::get();
+
+    let response = client
+        .get("https://endoflife.date/api/python.json")
+        .send()
+        .await
+        .map_err(|e| format!("Failed to fetch Python versions: {}", e))?;
+
+    let versions: Vec<serde_json::Value> = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse Python versions: {}", e))?;
+
+    // 找到最新的稳定版本（非 EOL）
+    let stable_version = versions
+        .iter()
+        .filter(|v| {
+            // 过滤掉已 EOL 的版本
+            v.get("eol")
+                .and_then(|e| e.as_str())
+                .map(|eol| eol != "true")
+                .unwrap_or(true)
+        })
+        .filter(|v| {
+            // 过滤掉开发中版本
+            v.get("cycle")
+                .and_then(|c| c.as_str())
+                .map(|cycle| !cycle.contains("rc") && !cycle.contains("beta"))
+                .unwrap_or(true)
+        })
+        .max_by(|a, b| {
+            let a_ver = a.get("cycle").and_then(|v| v.as_str()).unwrap_or("0");
+            let b_ver = b.get("cycle").and_then(|v| v.as_str()).unwrap_or("0");
+            compare_python_versions(a_ver, b_ver)
+        })
+        .and_then(|v| v.get("latest").and_then(|v| v.as_str()))
+        .ok_or("Failed to find Python version")?
+        .to_string();
+
+    Ok(PythonLatestVersion {
+        stable: stable_version,
+    })
+}
+
+/// 比较 Python 版本号
+fn compare_python_versions(a: &str, b: &str) -> std::cmp::Ordering {
+    let parse = |v: &str| -> (u32, u32, u32) {
+        let parts: Vec<&str> = v.split('.').collect();
+        (
+            parts.first().and_then(|p| p.parse().ok()).unwrap_or(0),
+            parts.get(1).and_then(|p| p.parse().ok()).unwrap_or(0),
+            parts.get(2).and_then(|p| p.parse().ok()).unwrap_or(0),
+        )
+    };
+
+    let (a1, a2, a3) = parse(a);
+    let (b1, b2, b3) = parse(b);
+
+    a1.cmp(&b1).then(a2.cmp(&b2)).then(a3.cmp(&b3))
+}
+
+/// 获取 winget Python 包名（根据版本号）
+/// 例如: "3.14.5" -> "Python.Python.3.14"
+fn winget_python_package(version: &str) -> String {
+    let parts: Vec<&str> = version.split('.').collect();
+    if parts.len() >= 2 {
+        format!("Python.Python.{}.{}", parts[0], parts[1])
+    } else {
+        "Python.Python.3.12".to_string() // 默认回退
+    }
+}
+
+/// 安装 Python
+#[tauri::command]
+pub async fn install_python() -> Result<String, String> {
+    use std::process::Command;
+
+    // 获取最新版本以确定包名
+    let latest = get_python_latest_version().await?;
+    let package = winget_python_package(&latest.stable);
+
+    let (cmd, args) = if cfg!(target_os = "windows") {
+        // Windows: 使用 winget，包名根据最新版本动态确定
+        ("cmd", vec!["/C", "winget", "install", &package, "--silent"])
+    } else if cfg!(target_os = "macos") {
+        // macOS: 使用 Homebrew
+        ("brew", vec!["install", "python@3.12"])
+    } else {
+        // Linux: 使用系统包管理器
+        ("bash", vec!["-c", "sudo apt-get update && sudo apt-get install -y python3 python3-pip python3-venv"])
+    };
+
+    let output = Command::new(cmd)
+        .args(&args)
+        .output()
+        .map_err(|e| format!("无法启动安装程序: {}", e))?;
+
+    if output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        Ok(format!("Python 安装成功！{}", stdout))
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        let exit_code = output.status.code().unwrap_or(-1);
+
+        // 组合所有可用的错误信息
+        let error_detail = if !stderr.is_empty() {
+            stderr
+        } else if !stdout.is_empty() {
+            stdout
+        } else {
+            "未知错误".to_string()
+        };
+
+        Err(format!("安装失败 (退出码: {}): {}", exit_code, error_detail))
+    }
+}
+
+/// 重新安装 Python（覆盖安装，修复环境问题）
+#[tauri::command]
+pub async fn reinstall_python() -> Result<String, String> {
+    use std::process::Command;
+
+    // 获取最新版本以确定包名
+    let latest = get_python_latest_version().await?;
+    let package = winget_python_package(&latest.stable);
+
+    let (cmd, args) = if cfg!(target_os = "windows") {
+        // Windows: 使用 winget 强制重新安装
+        ("cmd", vec!["/C", "winget", "install", &package, "--silent", "--force"])
+    } else if cfg!(target_os = "macos") {
+        // macOS: 使用 Homebrew 重新安装
+        ("brew", vec!["reinstall", "python@3.12"])
+    } else {
+        // Linux: 使用系统包管理器重新安装
+        ("bash", vec!["-c", "sudo apt-get update && sudo apt-get install --reinstall -y python3 python3-pip python3-venv"])
+    };
+
+    let output = Command::new(cmd)
+        .args(&args)
+        .output()
+        .map_err(|e| format!("无法启动安装程序: {}", e))?;
+
+    if output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        Ok(format!("Python 重新安装成功！{}", stdout))
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        let exit_code = output.status.code().unwrap_or(-1);
+
+        // 组合所有可用的错误信息
+        let error_detail = if !stderr.is_empty() {
+            stderr
+        } else if !stdout.is_empty() {
+            stdout
+        } else {
+            "未知错误".to_string()
+        };
+
+        Err(format!("重新安装失败 (退出码: {}): {}", exit_code, error_detail))
+    }
+}
+
+/// Git 版本信息
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitVersion {
+    /// Git 是否已安装
+    pub installed: bool,
+    /// Git 版本号
+    pub version: Option<String>,
+    /// 错误信息
+    pub error: Option<String>,
+}
+
+/// 检查 Git 版本
+#[tauri::command]
+pub async fn get_git_version() -> Result<GitVersion, String> {
+    use std::process::Command;
+
+    let output = if cfg!(target_os = "windows") {
+        Command::new("cmd")
+            .args(["/C", "git", "--version"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+    } else {
+        Command::new("git")
+            .arg("--version")
+            .output()
+    };
+
+    match output {
+        Ok(out) => {
+            if out.status.success() {
+                let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                // git --version 输出格式: "git version 2.44.0"
+                let version = stdout
+                    .split_whitespace()
+                    .nth(2)
+                    .unwrap_or("")
+                    .to_string();
+                Ok(GitVersion {
+                    installed: true,
+                    version: Some(version),
+                    error: None,
+                })
+            } else {
+                let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+                Ok(GitVersion {
+                    installed: false,
+                    version: None,
+                    error: Some(stderr),
+                })
+            }
+        }
+        Err(e) => Ok(GitVersion {
+            installed: false,
+            version: None,
+            error: Some(format!("无法执行 git: {}", e)),
+        }),
+    }
+}
+
+/// 安装 Git
+#[tauri::command]
+pub async fn install_git() -> Result<String, String> {
+    use std::process::Command;
+
+    #[cfg(target_os = "windows")]
+    {
+        // Windows: 使用 winget 安装 Git
+        let output = Command::new("cmd")
+            .args(["/C", "winget", "install", "Git.Git", "--silent", "--accept-package-agreements", "--accept-source-agreements"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+            .map_err(|e| format!("无法启动安装程序: {}", e))?;
+
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            Ok(format!("Git 安装成功！{}", stdout))
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            let exit_code = output.status.code().unwrap_or(-1);
+            let error_detail = if !stderr.is_empty() {
+                stderr
+            } else if !stdout.is_empty() {
+                stdout
+            } else {
+                "未知错误".to_string()
+            };
+            Err(format!("安装失败 (退出码: {}): {}", exit_code, error_detail))
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        // macOS: 使用 Homebrew 安装 Git
+        let output = Command::new("brew")
+            .args(["install", "git"])
+            .output()
+            .map_err(|e| format!("无法启动安装程序: {}", e))?;
+
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            Ok(format!("Git 安装成功！{}", stdout))
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            Err(format!("安装失败: {}", stderr))
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        // Linux: 使用 apt 安装 Git
+        let output = Command::new("bash")
+            .args(["-c", "sudo apt-get update && sudo apt-get install -y git"])
+            .output()
+            .map_err(|e| format!("无法启动安装程序: {}", e))?;
+
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            Ok(format!("Git 安装成功！{}", stdout))
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            Err(format!("安装失败: {}", stderr))
+        }
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    {
+        Err("不支持的操作系统".to_string())
+    }
+}
+
+/// VS Code 状态
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VSCodeStatus {
+    /// 是否已安装
+    found: bool,
+    /// 当前版本
+    version: Option<String>,
+    /// 最新版本
+    latest_version: Option<String>,
+}
+
+/// 检测 VS Code
+#[tauri::command]
+pub async fn check_vscode() -> Result<VSCodeStatus, String> {
+    use std::process::Command;
+
+    // 尝试执行 code --version
+    let output = if cfg!(target_os = "windows") {
+        // Windows 上尝试 code.cmd 或 code
+        Command::new("cmd")
+            .args(["/C", "code", "--version"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+            .or_else(|_| {
+                Command::new("code")
+                    .arg("--version")
+                    .creation_flags(CREATE_NO_WINDOW)
+                    .output()
+            })
+    } else {
+        Command::new("code")
+            .arg("--version")
+            .output()
+    };
+
+    let (found, version) = match output {
+        Ok(out) if out.status.success() => {
+            let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            // code --version 输出多行，第一行是版本号
+            let ver = stdout.lines().next().unwrap_or("").trim().to_string();
+            if ver.is_empty() {
+                (false, None)
+            } else {
+                (true, Some(ver))
+            }
+        }
+        _ => (false, None),
+    };
+
+    // 获取最新版本（从 GitHub API）
+    let latest_version = if found {
+        get_vscode_latest_version().await.ok()
+    } else {
+        None
+    };
+
+    Ok(VSCodeStatus {
+        found,
+        version,
+        latest_version,
+    })
+}
+
+/// 获取 VS Code 最新版本
+async fn get_vscode_latest_version() -> Result<String, String> {
+    let client = crate::proxy::http_client::get();
+
+    let response = client
+        .get("https://api.github.com/repos/microsoft/vscode/releases/latest")
+        .header("User-Agent", "cc-switch")
+        .send()
+        .await
+        .map_err(|e| format!("Failed to fetch VS Code version: {}", e))?;
+
+    let json: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse VS Code version: {}", e))?;
+
+    json.get("tag_name")
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim_start_matches('v').to_string())
+        .ok_or_else(|| "Failed to get VS Code version".to_string())
+}
+
+/// 安装 VS Code
+#[tauri::command]
+pub async fn install_vscode() -> Result<String, String> {
+    use std::process::Command;
+
+    let (cmd, args) = if cfg!(target_os = "windows") {
+        // Windows: 使用 winget
+        ("cmd", vec!["/C", "winget", "install", "Microsoft.VisualStudioCode", "--silent"])
+    } else if cfg!(target_os = "macos") {
+        // macOS: 使用 Homebrew
+        ("brew", vec!["install", "--cask", "visual-studio-code"])
+    } else {
+        // Linux: 使用 apt
+        ("bash", vec!["-c", "sudo apt-get update && sudo apt-get install -y code"])
+    };
+
+    let output = Command::new(cmd)
+        .args(&args)
+        .output()
+        .map_err(|e| format!("无法启动安装程序: {}", e))?;
+
+    if output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        Ok(format!("VS Code 安装成功！{}", stdout))
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        let exit_code = output.status.code().unwrap_or(-1);
+
+        let error_detail = if !stderr.is_empty() {
+            stderr
+        } else if !stdout.is_empty() {
+            stdout
+        } else {
+            "未知错误".to_string()
+        };
+
+        Err(format!("安装失败 (退出码: {}): {}", exit_code, error_detail))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

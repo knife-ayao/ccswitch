@@ -208,14 +208,16 @@ export function NodeInstaller() {
       return null;
     }
 
+    const btnClass = "h-7 text-xs px-2";
+
     switch (nodeStatus) {
       case "not_installed":
         return (
-          <Button onClick={installNodejs} disabled={isInstalling}>
+          <Button className={btnClass} onClick={installNodejs} disabled={isInstalling}>
             {isInstalling ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              <Loader2 className="w-3 h-3 mr-1 animate-spin" />
             ) : (
-              <Download className="w-4 h-4 mr-2" />
+              <Download className="w-3 h-3 mr-1" />
             )}
             {isInstalling
               ? t("tools.nodejs.installing", { defaultValue: "安装中..." })
@@ -225,11 +227,11 @@ export function NodeInstaller() {
 
       case "too_old":
         return (
-          <Button variant="destructive" onClick={updateNodejs} disabled={isUpdating}>
+          <Button className={btnClass} variant="destructive" onClick={updateNodejs} disabled={isUpdating}>
             {isUpdating ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              <Loader2 className="w-3 h-3 mr-1 animate-spin" />
             ) : (
-              <ArrowUpCircle className="w-4 h-4 mr-2" />
+              <ArrowUpCircle className="w-3 h-3 mr-1" />
             )}
             {isUpdating
               ? t("tools.nodejs.updating", { defaultValue: "更新中..." })
@@ -242,11 +244,11 @@ export function NodeInstaller() {
 
       case "outdated":
         return (
-          <Button onClick={updateNodejs} disabled={isUpdating}>
+          <Button className={btnClass} onClick={updateNodejs} disabled={isUpdating}>
             {isUpdating ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              <Loader2 className="w-3 h-3 mr-1 animate-spin" />
             ) : (
-              <ArrowUpCircle className="w-4 h-4 mr-2" />
+              <ArrowUpCircle className="w-3 h-3 mr-1" />
             )}
             {isUpdating
               ? t("tools.nodejs.updating", { defaultValue: "更新中..." })
@@ -258,18 +260,7 @@ export function NodeInstaller() {
         );
 
       case "up_to_date":
-        return (
-          <Button variant="outline" onClick={installNodejs} disabled={isInstalling}>
-            {isInstalling ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <RefreshCw className="w-4 h-4 mr-2" />
-            )}
-            {isInstalling
-              ? t("tools.nodejs.reinstalling", { defaultValue: "重新安装中..." })
-              : t("tools.nodejs.reinstall", { defaultValue: "重新安装" })}
-          </Button>
-        );
+        return null; // 最新版本不显示按钮
 
       case "checking":
         return null;
@@ -289,41 +280,41 @@ export function NodeInstaller() {
             : ""
         }
       >
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+        <CardHeader className="p-3 pb-2">
+          <CardTitle className="flex items-center gap-2 text-sm">
             <img
               src="https://nodejs.org/static/images/logo.svg"
               alt="Node.js"
-              className="w-6 h-6"
+              className="w-4 h-4"
             />
             Node.js
             {nodeStatus === "too_old" && (
-              <Badge variant="destructive">
+              <Badge variant="destructive" className="text-xs px-1 py-0">
                 {t("tools.nodejs.requiresUpdate", {
                   defaultValue: "需要更新",
                 })}
               </Badge>
             )}
           </CardTitle>
-          <CardDescription>
+          <CardDescription className="text-xs">
             {t("tools.nodejs.description", {
               defaultValue:
                 "JavaScript 运行时环境，Claude Code、Codex 等工具的前置依赖",
             })}
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-3 pt-0">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               {getStatusIcon()}
 
               <div>
-                <div className={`text-sm font-medium ${getStatusColor()}`}>
+                <div className={`text-xs font-medium ${getStatusColor()}`}>
                   {getStatusText()}
                 </div>
 
                 {latestVersion && nodeStatus !== "not_installed" && (
-                  <div className="text-xs text-muted-foreground mt-1">
+                  <div className="text-xs text-muted-foreground">
                     {t("tools.nodejs.latestLts", {
                       defaultValue: "最新 LTS: {{version}}",
                       version: latestVersion.lts,
@@ -332,7 +323,7 @@ export function NodeInstaller() {
                 )}
 
                 {nodeStatus === "too_old" && (
-                  <div className="text-xs text-red-500 mt-1">
+                  <div className="text-xs text-red-500">
                     {t("tools.nodejs.tooOldWarning", {
                       defaultValue:
                         "当前版本无法运行 Claude Code，请立即更新！",
@@ -342,15 +333,16 @@ export function NodeInstaller() {
               </div>
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex gap-1">
               <Button
                 variant="outline"
                 size="sm"
+                className="h-7 text-xs px-2"
                 onClick={checkNodeVersion}
                 disabled={isChecking}
               >
                 <RefreshCw
-                  className={`w-4 h-4 mr-2 ${isChecking ? "animate-spin" : ""}`}
+                  className={`w-3 h-3 mr-1 ${isChecking ? "animate-spin" : ""}`}
                 />
                 {t("tools.nodejs.refresh", { defaultValue: "刷新" })}
               </Button>

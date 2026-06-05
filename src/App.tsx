@@ -1010,6 +1010,7 @@ function App() {
     );
   };
 
+  // 显示主界面
   return (
     <div
       className="flex flex-col h-screen overflow-hidden bg-background text-foreground selection:bg-primary/30 pb-4"

@@ -2703,6 +2703,9 @@
   "tools": {
     "title": "Environment Tools",
     "description": "Install and manage runtime environments for development",
+    "runtime": "Runtime",
+    "packages": "Tools",
+    "comingSoon": "More tools coming soon...",
     "nodejs": {
       "title": "Node.js",
       "description": "JavaScript runtime environment, required by Claude Code, Codex, and other tools",
@@ -2726,6 +2729,69 @@
       "installFailed": "Installation failed: {{error}}",
       "updateSuccess": "Node.js updated successfully!",
       "updateFailed": "Update failed: {{error}}"
+    },
+    "python": {
+      "title": "Python",
+      "description": "Python runtime environment, required by Claude Code to call Python libraries",
+      "healthy": "Environment healthy",
+      "notFound": "Python not found",
+      "isLatest": "Latest version: {{version}}",
+      "outdated": "Version outdated: {{version}}",
+      "pipMissing": "pip not available",
+      "libsMissing": "Missing libraries: {{libs}}",
+      "needsReinstall": "Environment issues detected, reinstall required",
+      "checking": "Checking...",
+      "installing": "Installing...",
+      "updating": "Updating...",
+      "reinstalling": "Reinstalling...",
+      "install": "Install Python",
+      "updateTo": "Update to {{version}}",
+      "reinstall": "Reinstall Python",
+      "refresh": "Refresh check",
+      "latestVersion": "Latest version: {{version}}",
+      "requiresReinstall": "Reinstall required",
+      "installSuccess": "Python installed successfully!",
+      "installFailed": "Installation failed: {{error}}",
+      "updateSuccess": "Python updated successfully!",
+      "updateFailed": "Update failed: {{error}}",
+      "reinstallSuccess": "Python reinstalled successfully!",
+      "reinstallFailed": "Reinstallation failed: {{error}}"
+    },
+    "claudeCode": {
+      "description": "Anthropic official CLI tool",
+      "installed": "Installed {{version}}",
+      "notInstalled": "Not installed",
+      "checking": "Checking...",
+      "installing": "Installing...",
+      "install": "Install",
+      "refresh": "Refresh",
+      "latestVersion": "Latest version: {{version}}",
+      "installSuccess": "Claude Code installed successfully!",
+      "installFailed": "Installation failed: {{error}}"
+    },
+    "codex": {
+      "description": "OpenAI official CLI tool",
+      "installed": "Installed {{version}}",
+      "notInstalled": "Not installed",
+      "checking": "Checking...",
+      "installing": "Installing...",
+      "install": "Install",
+      "refresh": "Refresh",
+      "latestVersion": "Latest version: {{version}}",
+      "installSuccess": "Codex installed successfully!",
+      "installFailed": "Installation failed: {{error}}"
+    },
+    "vscode": {
+      "description": "Microsoft code editor",
+      "installed": "Installed {{version}}",
+      "notInstalled": "Not installed",
+      "checking": "Checking...",
+      "installing": "Installing...",
+      "install": "Install",
+      "refresh": "Refresh",
+      "latestVersion": "Latest version: {{version}}",
+      "installSuccess": "VS Code installed successfully!",
+      "installFailed": "Installation failed: {{error}}"
     }
   }
 }
